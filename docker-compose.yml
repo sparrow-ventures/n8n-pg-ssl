@@ -1,0 +1,72 @@
+version: '3.1'
+
+services:
+  # from https://github.com/n8n-io/n8n/tree/master/docker/compose/withPostgres
+  postgres:
+    image: postgres:11
+    restart: always
+    environment:
+      - POSTGRES_USER
+      - POSTGRES_PASSWORD
+      - POSTGRES_DB
+      - POSTGRES_NON_ROOT_USER
+      - POSTGRES_NON_ROOT_PASSWORD
+      # - PGDATA="/var/lib/postgresql/data/pgdata"
+    volumes:
+      - ./init-data.sh:/docker-entrypoint-initdb.d/init-data.sh
+      # GCP: - /mnt/stateful_partition/APP/postgres/db:/var/lib/postgresql/data/pgdata
+      - ${DATADIR:?}/postgres:/var/lib/postgresql/data
+
+  n8n:
+    image: n8nio/n8n
+    restart: always
+    environment:
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
+      - DB_POSTGRESDB_USER=${POSTGRES_NON_ROOT_USER}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_NON_ROOT_PASSWORD}
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER
+      - N8N_BASIC_AUTH_PASSWORD
+      - N8N_HOST
+      - N8N_PORT
+      - N8N_PROTOCOL
+      - VUE_APP_URL_BASE_API
+    ports:
+      - 5678:5678
+    links:
+      - postgres
+    volumes:
+      # - ~/.n8n:/home/node/.n8n
+      - ${DATADIR?}/n8n
+    # Wait 5 seconds to start n8n to make sure that PostgreSQL is ready
+    # when n8n tries to connect to it
+    command: /bin/sh -c "sleep 5;  n8n start"
+
+  # from: https://github.com/JonasAlfredsson/docker-nginx-certbot/blob/master/examples/docker-compose.yml
+  nginx-certbot:
+    image: jonasal/nginx-certbot:latest
+    restart: unless-stopped
+    environment:
+      - CERTBOT_EMAIL=${CERTBOT_EMAIL?}
+      - N8N_HOST=${N8N_HOST?}
+      - STAGING
+      - DHPARAM_SIZE
+      - RSA_KEY_SIZE
+      - ELLIPTIC_CURVE
+      - USE_ECDSA
+      - RENEWAL_INTERVAL
+      - DEBUG
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - ${DATADIR?}/nginx_secrets:/etc/letsencrypt
+      - ./n8n.conf.template:/tmp/n8n.conf.template
+    command: # from https://serverfault.com/questions/577370/how-can-i-use-environment-variables-in-nginx-conf
+      /bin/bash -c "envsubst  < /tmp/n8n.conf.template > /etc/nginx/user_conf.d/default.conf && /scripts/start_nginx_certbot.sh" 
+
+volumes:
+  nginx_secrets:    

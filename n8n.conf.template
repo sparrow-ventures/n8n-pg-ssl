@@ -1,0 +1,30 @@
+upstream n8n-frontend {
+    server n8n:5678;
+}
+
+
+server {
+    # Listen to port 443 on both IPv4 and IPv6.
+    listen 443 ssl default_server reuseport;
+    listen [::]:443 ssl default_server reuseport;
+
+    # Domain names this server should respond to.
+    server_name ${N8N_HOST};
+
+    # Load the certificate files.
+    ssl_certificate         /etc/letsencrypt/live/${N8N_HOST}/fullchain.pem;
+    ssl_certificate_key     /etc/letsencrypt/live/${N8N_HOST}/privkey.pem;
+    ssl_trusted_certificate /etc/letsencrypt/live/${N8N_HOST}/chain.pem;
+
+    # gzip on;
+    # gzip_types    text/plain application/javascript application/x-javascript text/javascript text/xml text/css;   
+
+
+    # Load the Diffie-Hellman parameter.
+    ssl_dhparam /etc/letsencrypt/dhparams/dhparam.pem;
+
+    location / {
+        proxy_pass http://n8n-frontend/;
+    }
+
+}
